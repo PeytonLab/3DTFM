@@ -1,12 +1,15 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Traction Force Microscopy %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 8/23/17
+%
 % If used please cite:
 % David Podorefsky, Peyton Laboratory at University of Massachusetts Amherst
 % &
 % Bar-Kochba E., Toyjanova J., Andrews E., Kim K., Franck C. (2014) A fast 
 % iterative digital volume correlation algorithm for large deformations. 
 % Experimental Mechanics. doi: 10.1007/s11340-014-9874-2
+%
 clear; close all; clc
 %% Workspace set up (directory of Stack folder of conditions)
 folder_name = uigetdir('','Select Experiment Folder');
@@ -37,22 +40,15 @@ for p = 1:masfolel
         for j = 1:t %time point
             vol = cell(1,c);	
             for k=1:c   %channel
-                a = 2+k; %starting index number **use 2+k if name starts with number
-                if k == 1
-                   RGB = 3; %DAPI
-                elseif k == 2 
-                   RGB = 2; %EGFP
-                elseif k == 3
-                   RGB = 1; %red
-                end			 
+                a = 2+k; %starting index number **use 2+k if name starts with number		 
                 image = scene(a+(z*c)*(j-1)).name;
                 stack = imread(image); %reads first slice of time point         
-                stack = stack(:,:,RGB);     
+                stack = rgb2gray(stack);     
                 for i=2:z %z slice
                     index = a+(z*c)*(j-1)+c*(i-1);
                     image = scene(index).name;
                     temp = imread(image);
-                    temp = temp(:,:,RGB);  %Comment if not (~,~,3)
+                    temp = rgb2gray(temp);
                     stack = cat(3, stack, temp);
                 end
                 vol{k} = stack;
@@ -69,39 +65,12 @@ for p = 1:masfolel
     cd ..
 end
 
-%% Hilbert Space to Store Computations (TFM.mat)
-masterfol = dir;
-masfolel = numel(masterfol)-2;
-TFM = cell(1,masfolel);
-for p = 1:length(TFM)
-    cd(masterfol(p+2).name) %Navagate to condition
-    cellsfol = dir;
-    cellfolel = numel(cellsfol)-2;
-    TFM{p} = cell(1,cellfolel);
-    for s = 1:cellfolel
-        cd(cellsfol(s+2).name) %Navagate to cell        
-        scene = dir; %Create directory variable
-        el = numel(scene)-3; %Determine number of elements in scene  
-        tp = el/c/z - 1; %timepoints in set (dt)
-        for t=1:tp
-            if t == 1
-               TFM{p}{s} = cell(tp,1);
-            end
-            TFM{p}{s}{t} = cell(1,4);
-        end
-        cd ..
-    end
-    cd ..
-end
-save('TFM.mat','TFM')
-
 %% Displacement Field Calculation (FIDVC) %%
 % Estimates displacements between beads in successive time pointns via FIDVC algorithm
 % NOTE: Image stack should be at least 1.5 times subset size (128x1.5=192,64x1.5=96)
 % The default subset size is 128x128x64, so we recommend that the minimum input volume size should be 192x192x96.
 % The size of the input image stack should be divisible by 0.5 times the size of the subset.
-% 512/(128/2)=8, 96/(64/2)=3, 128/(64/2)=4 (valid sizes)
-% 
+% 512/(128/2)=8, 96/(64/2)=3, 128/(64/2)=4 (valid sizes) 
 
 sSize = [128 128 64]; %subset size
 incORcum = 'incremental';
@@ -110,7 +79,6 @@ filename{2} = 1; %channel to run IDVC (DAPI)
 
 %If you must stop FIDVC, set "a" to condition and "b" to cell
 i = 0; %Leave turned off unless you need to use it, i = 1
-
 if i == 1
     a = 1; %i.e. start from 7th cell in 1st condition
     b = 7;
@@ -119,9 +87,9 @@ if i == 1
     b = 1;
 end
 
-masterfol = dir;
-for p = a:length(TFM)
-    cd(masterfol(p+2).name) %Navagate to condition
+%Run FIDVC
+for p = a:masfolel
+    cd(masterfol(p+2).name)
     cellsfol = dir;
     cellfolel = numel(cellsfol)-2;	
     for s = b:cellfolel    
@@ -135,17 +103,24 @@ for p = a:length(TFM)
     cd ..
 end
 
-%Assemble displacements into TFM.mat file
-masterfol = dir;
-for p=1:length(TFM)
+%% Hilbert Space to Store Computations (TFM.mat)
+TFM = cell(1,masfolel);
+for p = 1:length(TFM)
     cd(masterfol(p+2).name) %Navagate to condition
     cellsfol = dir;
     cellfolel = numel(cellsfol)-2;
+    TFM{p} = cell(1,cellfolel);
     for s = 1:cellfolel
-        cd(cellsfol(s+2).name)
+        cd(cellsfol(s+2).name) %Navagate to cell        
         cd('Volumes')
-        load('FIDVC.mat')
-        for t = 1:length(u)
+        load('FIDVC.mat')  
+        V = dir('vol*'); %Create directory variable
+        dt = numel(V)-1; %dt      
+        for t = 1:dt
+            if t == 1
+               TFM{p}{s} = cell(dt,1);
+            end
+            TFM{p}{s}{t} = cell(1,4);
             for i = 1:4
                 TFM{p}{s}{t}{1,i} = u{t}{1,i};
             end
@@ -156,6 +131,70 @@ for p=1:length(TFM)
 end
 save('TFM.mat','TFM')
 
+%% Remove Drift from Displacement Field
+for p = 1:length(TFM)
+    cd(masterfol(p+2).name)
+    cellsfol = dir;
+    cellfolel = numel(cellsfol)-2;
+    for s = 1:length(TFM{p})
+        cd(cellsfol(s+2).name)
+        cd('Volumes')
+        V = dir('vol*'); %directory of volumetric matrices
+        dt = size(V,1)-1; %maximum time points                        
+        for t = 1:dt            
+            load(V(t+1).name)
+            if p && s && t ==1
+               dm = size(vol{1},1)/(size(TFM{1}{1}{1}{1},1)-1); 
+            end
+            I = vol{2}; %EGFP channel
+            zmax = size(I,3);
+            Zint = zeros(zmax,1);
+            for z = 1:zmax
+                Zint(z) = sum(sum(I(:,:,z))); %intensity of each slice
+            end
+            [~,idx] = max(Zint); %max intensity slice for time point
+            I = vol{2}(:,:,idx);
+            BW = im2bw(I,graythresh(I));
+            [B,~] = bwboundaries(BW,'noholes');
+            if ~isempty(B) %If boundaries exist, which boundary to use
+                BIdx = zeros(size(B,1),1);
+                for b = 1:size(B,1)
+                    BIdx(b) = size(B{b},1);
+                end
+                [~,Idx] = max(BIdx);
+                B = B{Idx};
+                %Cell force boundary
+                Bcorners = zeros(2);
+                Bcorners(1,2) = min(B(:,1));
+                Bcorners(2,2) = max(B(:,1));
+                Bcorners(1,1) = min(B(:,2));
+                Bcorners(2,1) = max(B(:,2));  
+                Cp = [(Bcorners(1,1)+Bcorners(2,1))/2,(Bcorners(1,2)+Bcorners(2,2))/2];
+                Diameter = sqrt((Bcorners(2,1)-Bcorners(1,1))^2+(Bcorners(2,2)-Bcorners(1,2))^2);     
+                [rr,cc] = meshgrid(1:size(TFM{p}{s}{t}{1},1));
+                C = sqrt((rr-Cp(1)/size(vol{1},1)*size(TFM{p}{s}{t}{1},1)).^2+(cc-Cp(2)/size(vol{1},1)*size(TFM{p}{s}{t}{1},1)).^2)<=Diameter/dm; 
+                C = ~C;
+
+                %Random sample and subtract
+                for i = 1:4
+                    for l = 1:size(TFM{p}{s}{t}{i},3)   
+                        A = TFM{p}{s}{t}{i}(:,:,l);
+                        B = A(C);
+                        y = datasample(B,ceil(0.75*length(B)));
+                        y = mean(y);
+                        A = A - y;
+                        TFM{p}{s}{t}{i}(:,:,l) = A;
+                    end
+                end
+             else
+               disp(['No boundary detected for s=',num2str(s),' at t=',num2str(t)]);
+            end
+        end
+        cd ('..\..')
+    end
+    cd ..
+end
+save('TFM.mat','TFM')
 %% Traction Force Computation (LD-3D-TFM) %%
 % FUNCTIONRUNTFM calculates 3D Traction Force Microscopy metrics
 % [Fij, Sij, Eij, Uhat, ti, tiPN] = functionRunTFM(u,dm, surface, normals,
@@ -163,7 +202,7 @@ save('TFM.mat','TFM')
 % Cauchy stress Sij, Lagrangian strain Eij, Strain energy density Uhat,
 % surface traction vector ti, and in-plane and out-of-plane
 % components of surface tractions
-clear;
+
 masterfol = dir;
 load TFM.mat
 
@@ -176,7 +215,7 @@ load vol01.mat
 dm=size(vol{1},1)/(size(TFM{1}{1}{1}{1},1)-1); %meshgrid spacing (8 by default)
 cd('..\..\..')
 
-E = 2000; %Pa,  Young's Modulus
+E = 1500; %Pa,  Young's Modulus
 nu = 0.45; %Poisson's Ratio
 
 for p = 1:length(TFM)
@@ -242,7 +281,7 @@ masfolel = numel(masterfol)-4;
 
 sc = 6.2; %[px/um]
 dz = 0.34; %[um/z]
-tf = 30; %[min] time frame
+tf = 15; %[min] time frame
 fr = 3; %frames per second
 gif = 1; %gif creation on (1) or off (0)
 
@@ -263,6 +302,9 @@ for p = 1:masfolel
         ZIdx = zeros(1,tmax); 
         for t = 1:tmax %Determine most intense slice at each time point            
             load(V(t).name)
+            if p && s && t ==1
+               dm=size(vol{1},1)/(size(TFM{1}{1}{1}{1},1)-1); 
+            end
             I = vol{2}; %EGFP channel
             zmax = size(I,3);
             Zint = zeros(zmax,1);
@@ -273,24 +315,7 @@ for p = 1:masfolel
             ZIdx(t) = Idx;
         end
         ZMax = ceil(mean(ZIdx));        
-        
-        %Determine displacement slice to view
-        
-		%1.Find max displacement slice
-		% UIdx = zeros(length(TFM{p}{s}),1);     
-        % for t = 1:length(TFM{p}{s})
-            % zmax = size(TFM{p}{s}{t}{1,4},3);
-            % zmean = zeros(zmax,1);
-            % for z = 1:zmax
-                % zmean(z) = mean2(TFM{p}{s}{t}{1,4}(:,:,z));
-            % end
-            % [~,I]=max(zmean);
-            % UIdx(t)=I;
-        % end
-        % UMax=ceil(mean(UIdx));
-        
-		%2. Use slice of max cell intensity
-		UMax=ceil(ZMax/dm); %
+		UMax=ceil(ZMax/dm); %Use slice of max cell intensity
         
         %Construct Boundary
         BS = cell(tmax,1);
@@ -312,8 +337,8 @@ for p = 1:masfolel
                 [~,Idx] = max(BIdx);
                 BS{t} = B{Idx}; %Boundary for time point
               else
-                disp('Uh oh');
-            end  
+                disp(['No boundary detected for s=',num2str(s),' at t=',num2str(t)]);
+            end 
         end
 
         %The Plot
@@ -325,21 +350,26 @@ for p = 1:masfolel
 		plotIdx{3} = 1:dm:sizeI(3)+1; plotIdx{3} = plotIdx{3}.*dz;
         
         %Determine color map bounds, displacement and traction        
-            %Max
-            for t = 2:length(TFM{p}{s})
-                cmax1(t) = max(max(TFM{p}{s}{t}{1,4}(:,:,UMax)));
-                cmax2(t) = max(max(TFM{p}{s}{t}{2,4}));
-            end
-            cmax1=ceil(max(cmax1))./(sc*tf).*60; %microns/hr
-            cmax2=ceil(max(cmax2))*sc^2./(tf*60); %Pa/s
+           
+        for t = 1:length(TFM{p}{s})
+            cmax1(t) = max(max(TFM{p}{s}{t}{1,4}(:,:,UMax)));  %Max
+            cmax2(t) = max(max(TFM{p}{s}{t}{2,4}));
+            cmin1(t) = min(min(TFM{p}{s}{t}{1,4}(:,:,UMax)));  %Min
+            cmin2(t) = min(min(TFM{p}{s}{t}{2,4}));
+        end
 
-            %Min
-            for t = 2:length(TFM{p}{s})
-                cmin1(t) = min(min(TFM{p}{s}{t}{1,4}(:,:,UMax)));
-                cmin2(t) = min(min(TFM{p}{s}{t}{2,4}));
-            end
-            cmin1=floor(min(cmin1))./(sc*tf).*60; %microns/hr
-            cmin2=floor(min(cmin2))*sc^2./(tf*60); %Pa/s
+        if length(cmax1) > 1  %remove first time point assuming drift
+           cmax1 = cmax1(2:end);
+           cmax2 = cmax2(2:end);
+           cmin1 = cmin1(2:end);
+           cmin2 = cmin2(2:end);
+        end
+
+        cmax1=ceil(max(cmax1))./(sc*tf).*60; %microns/hr
+        cmax2=ceil(max(cmax2))*sc^2./(tf*60); %Pa/s
+        cmin1=floor(min(cmin1))./(sc*tf).*60; %microns/hr
+        cmin2=floor(min(cmin2))*sc^2./(tf*60); %Pa/s
+
         
         for t = 1:length(TFM{p}{s})
             %Plot displacement map
@@ -353,28 +383,31 @@ for p = 1:masfolel
             caxis([cmin1,cmax1])
             set(h,'linestyle','none'); axis image
             
-            %Plot boundary
-            hold on
-            plot(BS{t+1}(:,2)./sc,BS{t+1}(:,1)./sc,'w','LineWidth',2)
-            hold off
+            if ~isempty(BS{t+1})
+                %Plot boundary
+                hold on
+                plot(BS{t+1}(:,2)./sc,BS{t+1}(:,1)./sc,'white','LineWidth',2)
+                hold off
 
-            %Mask cell projection onto plot
-            M = sizeI(1:2);
-            green = cat(3, zeros(M), ones(M), zeros(M));
-            load(V(t+1).name)
-            I = vol{2}(:,:,ZMax);
-            %INITPSF = ones(size(S)); %blind deconvolution
-            %[J,PSF] = deconvblind(S,INITPSF);
-            hold on
-            x0 = [plotIdx{1}(1) plotIdx{1}(end)];
-            y0 = [plotIdx{2}(1) plotIdx{2}(end)];
-            g=image(x0,y0,green);       
-            set(g, 'AlphaData',I)
-            hold off 
+                %Mask cell projection onto plot
+                M = sizeI(1:2);
+                green = cat(3, zeros(M), ones(M), zeros(M));
+                load(V(t+1).name)
+                I = vol{2}(:,:,ZMax);
+                %INITPSF = ones(size(S)); %blind deconvolution
+                %[J,PSF] = deconvblind(S,INITPSF);
+                hold on
+                x0 = [plotIdx{1}(1) plotIdx{1}(end)];
+                y0 = [plotIdx{2}(1) plotIdx{2}(end)];
+                g=image(x0,y0,green);       
+                set(g, 'AlphaData',I)
+                hold off
+            end
             
             %Arrows
-            [u,v] = gradient(TFM{p}{s}{t}{1,4}(:,:,UMax)./(sc*tf).*60);
-			
+            u = TFM{p}{s}{t}{1,1}(:,:,UMax)./(sc*tf).*60;
+            v = TFM{p}{s}{t}{1,2}(:,:,UMax)./(sc*tf).*60;
+            
             %Crop arrows and plot index
             k = 2; %croping passes
                 A = u;
@@ -411,13 +444,13 @@ for p = 1:masfolel
             
             %Image parameters
             colormap(ax1,jet) %contour colormap
-            set(gca,'Ydir','reverse')           
-            title('Displacement Field')
-            ylabel(c,'Bead displacement (\mum/hr)')
-            xlabel('\mum'); ylabel('\mum')
+            set(gca,'Ydir','reverse','FontName','Arial','linewidth',0.75,'fontsize',10,'fontweight','bold')
+            title('Displacement Field','fontsize',13)
+            ylabel(c,'Bead displacement (um/hr)','fontsize',12)
+            xlabel('um'); ylabel('um')
             axis([1 sizeI(2) 1 sizeI(1)]./sc)
             box off
-            set(gcf, 'color', [1 1 1]);
+            set(gcf, 'color','white');
             drawnow
             
             %Save gif and .tiff
@@ -430,7 +463,7 @@ for p = 1:masfolel
                 [G,map] = rgb2ind(im1{t},256);
                 
                 filename = [outputdir,'dis.gif'];
-                if t == 1;
+                if t == 1
                    imwrite(G,map,filename,'gif', 'LoopCount',inf,'DelayTime',1/fr);
                   else
                    imwrite(G,map,filename,'gif','WriteMode','append','DelayTime',1/fr);
@@ -451,16 +484,18 @@ for p = 1:masfolel
             caxis([cmin2,cmax2])
             set(h,'linestyle','none'); axis image
             
-            %Plot boundary
-            hold on
-            plot(BS{t+1}(:,2)./sc,BS{t+1}(:,1)./sc,'w','LineWidth',3)
-            hold off
-            
-            %Plot cell
-            hold on
-            g=image(x0,y0,green);       
-            set(g, 'AlphaData',I)
-            hold off 
+            if ~isempty(BS{t+1})
+                %Plot boundary
+                hold on
+                plot(BS{t+1}(:,2)./sc,BS{t+1}(:,1)./sc,'white','LineWidth',3)
+                hold off
+
+                %Plot cell
+                hold on
+                g=image(x0,y0,green);       
+                set(g, 'AlphaData',I)
+                hold off
+            end
             
             %Plot arrows
             hold on
@@ -469,10 +504,10 @@ for p = 1:masfolel
             
             %Image parameters
             colormap(ax2,jet)
-            set(gca,'Ydir','reverse') 
-            title('Traction Field')
-            ylabel(c,'Traction Force (Pa/s)')
-            xlabel('\mum'); ylabel('\mum')
+            set(gca,'Ydir','reverse','FontName','Arial','linewidth',0.75,'fontsize',10,'fontweight','bold')
+            title('Traction Field','fontsize',13)
+            ylabel(c,'Traction force (Pa/s)','fontsize',12)
+            xlabel('um'); ylabel('um')
             axis([1 sizeI(2) 1 sizeI(1)]./sc)
             box off
             set(gcf, 'color', [1 1 1]);
@@ -500,7 +535,6 @@ for p = 1:masfolel
     end
     cd('..')
 end
-
 %% Box plot 
 load TFM.mat
 p = length(TFM); %number of conditions
@@ -569,42 +603,51 @@ end
 UP(UP==0)=nan;
 FP(FP==0)=nan;
 
-%Condition index
-for i = 1:p
-    N(i) = masterfol(i+2).name;
-end
-
 %Populations' Displacements
 figure
-x = boxplot(UP./(sc*tf)*60,'Labels',{'Control','VEGF'});
-ylim([0 6.5])
-set(gca,'YTick',0:1:7)
-ylabel('Speed (um/hr)')
-title('Bead displacement')
+x = boxplot(UP./(sc*tf)*60,'Labels',{'5 wt%','20 wt%'});
+set(x(7,:),'Visible','off')
+ylim([0 8])
+set(gca,'YTick',0:1:8,'FontName','Arial','linewidth',0.75,'fontsize',10,'fontweight','bold')
+ylabel('Speed (um/hr)','fontsize',12)
+title('Bead Displacement','fontsize',13)
+set(x,{'linew'},{1})
+set(gcf,'color','white')
+box off
 
 %Populations' Tractions
 figure
-x = boxplot(FP.*sc^2./tf.*60,'Labels',{'Control','6uM CytoD'});
-ylim([0 1300])
-set(gca,'YTick',0:200:1300)
-ylabel('Force (Pa/hr)')
-title('Traction forces')
+x = boxplot(FP.*sc^2./(tf*60),'Labels',{'5 wt%','20 wt%'});
+set(x(7,:),'Visible','off')
+ylim([0 70])
+set(gca,'YTick',0:10:100,'FontName','Arial','linewidth',0.75,'fontsize',10,'fontweight','bold')
+ylabel('Force (Pa/s)','fontsize',12)
+title('Cellular Traction Forces','fontsize',13)
+set(x,{'linew'},{1})
+set(gcf,'color','white')
+box off
 
 %For each population
 for i=1:p
 	figure
-    boxplot(US{i}./(sc*tf)*60)
+    x = boxplot(US{i}./(sc*tf)*60);
     xlabel('Cell')
-    ylabel('Speed (\mum/hr)')
-    str=['Bead displacements (P',num2str(i),')'];
-    title(str)    
-    
+    ylabel('Speed (um/hr)')
+    str=['Bead Displacements (P',num2str(i),')'];
+    title(str)
+    set(x,{'linew'},{1})
+    set(gcf,'color','white')
+    box off
+
     figure
-	boxplot(FS{i}.*sc^2./tf.*60/10^2)
+	x = boxplot(FS{i}.*sc^2./(tf*60));
     xlabel('Cell')
-    ylabel('Force (Pa/hr)')
+    ylabel('Force (Pa/s)')
     str=['Cellular traction force (P',num2str(i),')'];
     title(str)
+    set(x,{'linew'},{1})
+    set(gcf,'color','white')
+    box off
 end
 
 %% 3D Recontruction of Cell w/ displacement vectors & contour map of traction  #still in dev
@@ -618,8 +661,8 @@ for p = 1:length(TFM)
           cell_name = num2str(masterscene(l+2+length(TFM{1,1})).name)
         end
         
-        tp = size(TFM{1,p}{1,l},1)+1; %Determine time points in cell 4D image 
-        for t = 1:tp
+        t = size(TFM{1,p}{1,l},1)+1; %Determine time points in cell 4D image 
+        for t = 1:t
             load([pwd,'\',cell_name,'\Vol\vol',num2str(t),'.mat'])
             I1 = vol{2}; %reads image
             I2 = zeros(size(I1));
