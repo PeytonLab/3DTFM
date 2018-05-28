@@ -36,58 +36,57 @@ function FV2=smoothpatch(FV,mode,itt,lambda,sigma)
 %   % Load a triangulated mesh of a sphere
 %   load MRI;
 %   D = squeeze(D);
-%   FV = isosurface(D,1);
-%
-%   % Calculate the smoothed version
+%   FV = patch(isosurface(D,1));
+
+%   Calculate the smoothed version
 %   FV2=smoothpatch(FV,1,5);
-%
+
 %   % Show the mesh and smoothed mesh
 %   figure, 
 %    subplot(1,2,1), patch(FV,'FaceColor',[1 0 0],'EdgeAlpha',0);  view(3); camlight
 %    subplot(1,2,2), patch(FV2,'FaceColor',[0 0 1],'EdgeAlpha',0); view(3); camlight
-%
+
 % Function is written by D.Kroon University of Twente (June 2009)
 if(nargin<2), mode =1; end
 if(nargin<3), itt=1; end
 if(nargin<4), lambda=1; end
 if(nargin<5), sigma=1; end
 
-sizev=size(FV.vertices);
+sizev=size(FV.Vertices);
 % Check size of vertice array
 if((sizev(2)~=3)||(length(sizev)~=2))
     error('patchnormals:inputs','The vertice list is not a m x 3 array')
 end
 
-sizef=size(FV.faces);
+sizef=size(FV.Faces);
 % Check size of vertice array
 if((sizef(2)~=3)||(length(sizef)~=2))
     error('patchnormals:inputs','The vertice list is not a m x 3 array')
 end
 
 % Check if vertice indices exist
-if(max(FV.faces(:))>size(FV.vertices,1))
+if(max(FV.Faces(:))>size(FV.Vertices,1))
     error('patchnormals:inputs','The face list contains an undefined vertex index')
 end
 
 % Check if vertice indices exist
-if(min(FV.faces(:))<1)
+if(min(FV.Faces(:))<1)
     error('patchnormals:inputs','The face list contains an vertex index smaller then 1')
 end
 
-FV.vertices=double(FV.vertices);
-FV.faces=double(FV.faces);
+FV.Vertices=double(FV.Vertices);
+FV.Faces=double(FV.Faces);
 if(mode==1)
     % Get the neighbour vertices of each vertice from the face list.
     Ne=vertex_neighbours(FV);
     % Do the curvature weighted smoothing
-    [Vx,Vy,Vz]=smoothpatch_curvature_double(double(FV.faces(:,1)),double(FV.faces(:,2)),double(FV.faces(:,3)),double(FV.vertices(:,1)),double(FV.vertices(:,2)),double(FV.vertices(:,3)),ceil(double(itt)),[double(lambda) double(sigma)],Ne);
+    [Vx,Vy,Vz]=smoothpatch_curvature_double(double(FV.Faces(:,1)),double(FV.Faces(:,2)),double(FV.Faces(:,3)),double(FV.Vertices(:,1)),double(FV.Vertices(:,2)),double(FV.Vertices(:,3)),ceil(double(itt)),[double(lambda) double(sigma)],Ne);
 else
     % Do the umbrella inverse distance weighted smoothing
-    [Vx,Vy,Vz]=smoothpatch_inversedistance_double(double(FV.faces(:,1)),double(FV.faces(:,2)),double(FV.faces(:,3)),double(FV.vertices(:,1)),double(FV.vertices(:,2)),double(FV.vertices(:,3)),ceil(double(itt)),[double(lambda) double(sigma)]);
+    [Vx,Vy,Vz]=smoothpatch_inversedistance_double(double(FV.Faces(:,1)),double(FV.Faces(:,2)),double(FV.Faces(:,3)),double(FV.Vertices(:,1)),double(FV.Vertices(:,2)),double(FV.Vertices(:,3)),ceil(double(itt)),[double(lambda) double(sigma)]);
 end
 
 FV2=FV;
-FV2.vertices(:,1)=Vx;
-FV2.vertices(:,2)=Vy;
-FV2.vertices(:,3)=Vz;
-
+FV2.Vertices(:,1)=Vx;
+FV2.Vertices(:,2)=Vy;
+FV2.Vertices(:,3)=Vz;

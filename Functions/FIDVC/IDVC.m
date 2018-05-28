@@ -94,9 +94,10 @@ end
 
 disp(['Convergence at iteration ',num2str(i)]);
 disp(['Title time: ',num2str(toc(t0))]);
+
+close(wb);
+
 end
-
-
 
 %% ========================================================================
 function varargout = parseImages(varargin)

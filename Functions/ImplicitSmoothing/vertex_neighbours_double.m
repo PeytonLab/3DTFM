@@ -71,6 +71,3 @@ for i=1:size(V,1)
     end
     Ne{i}=Pneig;
 end
-
-
-

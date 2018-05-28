@@ -61,7 +61,7 @@ for i = 2:numImages % Reads Volumes Starting on the Second Volumes
     I{2} = loadFile(fileInfo,i);
     
     %Start DVC
-    disp(['Current file: ' fileInfo.filename{i}])
+    disp(['Current file: ' fileInfo.filename{i-1}])
     [u_, cc{i-1}, dm] = IDVC(I,sSize0,u_);
     
     % Saving iterations of the DVC

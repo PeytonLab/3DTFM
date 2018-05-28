@@ -5,4 +5,4 @@ function Ne=vertex_neighbours(FV)
 % Ne=vertex_neighbours(FV)
 %
 
-Ne=vertex_neighbours_double(FV.faces(:,1),FV.faces(:,2),FV.faces(:,3),FV.vertices(:,1),FV.vertices(:,2),FV.vertices(:,3));
+Ne=vertex_neighbours_double(FV.Faces(:,1),FV.Faces(:,2),FV.Faces(:,3),FV.Vertices(:,1),FV.Vertices(:,2),FV.Vertices(:,3));

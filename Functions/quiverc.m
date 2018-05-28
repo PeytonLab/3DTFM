@@ -110,7 +110,7 @@ end
 % Define colormap 
 vr=sqrt(u.^2+v.^2);
 vrn=round(vr/max(vr(:))*64);
-CC=colormap(jet);
+CC=colormap;
 ax = newplot;
 next = lower(get(ax,'NextPlot'));
 hold_state = ishold;
@@ -170,7 +170,4 @@ end
 
 if ~hold_state, hold off, view(2); set(ax,'NextPlot',next); end
 
-%if nargout>0, hh = [h1;h2;h3]; end
-% set(gca, 'color', [0 0 0],'Xcolor','w','Ycolor','w');
-% set(gcf, 'color', [0 0 0]);
-%set(gcf, 'InvertHardCopy', 'off');
+if nargout>0, hh = [h1;h2;h3]; end
